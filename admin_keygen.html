@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalSeal Key Generator (Admin)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0f172a;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+        }
+    </style>
+</head>
+
+<body class="text-slate-200 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div
+        class="glass-panel p-8 rounded-2xl shadow-2xl max-w-md w-full border border-sky-500/20 relative overflow-hidden">
+        <!-- Background Glow -->
+        <div class="absolute -top-20 -right-20 w-64 h-64 bg-sky-500/10 rounded-full blur-[80px]"></div>
+        <div class="absolute -bottom-20 -left-20 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px]"></div>
+
+        <div class="relative z-10 text-center">
+            <h1
+                class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-emerald-400 mb-2">
+                LocalSeal Admin
+            </h1>
+            <p class="text-slate-400 text-sm mb-8">Official License Key Generator</p>
+
+            <div id="entropy-bar-container"
+                class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-8 mt-4 relative hidden">
+                <div id="entropy-bar"
+                    class="h-full bg-gradient-to-r from-purple-500 to-pink-500 w-0 transition-all duration-75"></div>
+                <div
+                    class="absolute inset-0 flex items-center justify-center text-[8px] text-white font-mono tracking-widest uppercase">
+                    Collecting Entropy...</div>
+            </div>
+
+            <div id="key-display"
+                class="bg-black/40 p-6 rounded-xl border border-slate-700 font-mono text-xl tracking-wider text-emerald-400 mb-6 select-all cursor-pointer hover:border-emerald-500/50 transition-colors">
+                CLICK GENERATE
+            </div>
+
+            <button onclick="generateKey()"
+                class="w-full py-4 bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-sky-900/30 active:scale-95 transition-all mb-4">
+                GENERATE NEW KEY
+            </button>
+
+            <p id="status-msg" class="text-xs text-slate-500 min-h-[1rem]"></p>
+        </div>
+    </div>
+
+    <script>
+        // --- CHAOS ENGINE ---
+        let entropyPool = [];
+        let chaosReady = false;
+
+        // 1. Collecte passive de mouvements de souris
+        document.addEventListener('mousemove', (e) => {
+            if (entropyPool.length > 500) return; // Limite
+            entropyPool.push(e.clientX, e.clientY, e.timeStamp);
+            updateEntropyVis();
+        });
+
+        function updateEntropyVis() {
+            const bar = document.getElementById('entropy-bar');
+            const container = document.getElementById('entropy-bar-container');
+
+            if (entropyPool.length > 0) container.classList.remove('hidden');
+
+            const progress = Math.min((entropyPool.length / 200) * 100, 100);
+            bar.style.width = `${progress}%`;
+
+            if (progress >= 100 && !chaosReady) {
+                chaosReady = true;
+                bar.classList.add('animate-pulse');
+            }
+        }
+
+        async function generateHash(input) {
+            try {
+                if (window.crypto && window.crypto.subtle) {
+                    const encoder = new TextEncoder();
+                    const data = encoder.encode(input);
+                    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                } else {
+                    throw new Error('WebCrypto unavailable');
+                }
+            } catch (e) {
+                // FALLBACK: Simple Hash (DJB2/SDBM variant) if Secure Context is missing
+                console.warn("Using fallback hash:", e);
+                let idx = 0, hash = 0xa1b2c3d4;
+                for (let i = 0; i < input.length; i++) {
+                    hash ^= input.charCodeAt(i);
+                    hash = (hash << 5) + (hash >>> 2); // Mix
+                    hash ^= (hash << 3);
+                }
+                // Pseudo-SHA expansion to get enough hex chars
+                let hex = (hash >>> 0).toString(16).padStart(8, '0');
+                while (hex.length < 64) {
+                    hex += hex;
+                    // Scramble slightly
+                    const part = parseInt(hex.slice(-8), 16);
+                    hex += ((part * 1664525 + 1013904223) >>> 0).toString(16).padStart(8, '0');
+                }
+                return hex;
+            }
+        }
+
+        async function generateKey() {
+            const btn = document.querySelector('button');
+            const originalText = btn.textContent;
+            const msg = document.getElementById('status-msg');
+
+            try {
+                btn.textContent = "CALCULATING CHAOS...";
+                btn.disabled = true;
+
+                // 1. Capture Telemetry (Network + Hardware)
+                const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || {};
+                const netEntropy = {
+                    rtt: conn.rtt || 'unknown',
+                    downlink: conn.downlink || 'unknown',
+                    effectiveType: conn.effectiveType || 'unknown',
+                    saveData: conn.saveData || false
+                };
+
+                const hardwareEntropy = {
+                    cores: navigator.hardwareConcurrency || 2,
+                    mem: navigator.deviceMemory || 4,
+                    screen: `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`,
+                    agent: navigator.userAgent
+                };
+
+                // 2. Fusion (Mouse + Net + Hardware + Time)
+                const chaosSeed = [
+                    ...entropyPool,
+                    JSON.stringify(netEntropy),
+                    JSON.stringify(hardwareEntropy),
+                    performance.now(),
+                    Date.now()
+                ].join('|');
+
+                // 3. Hashage (Robust)
+                const hash = await generateHash(chaosSeed || Math.random().toString());
+
+                // Extrait des blocs hex depuis le hash
+                const part1 = hash.substring(0, 4).toUpperCase();
+                const part3 = hash.substring(32, 36).toUpperCase();
+
+                // 4. TimeCode (Minutes actuelles)
+                const currentMinutes = Math.floor(Date.now() / 60000);
+                const timeCode = (currentMinutes & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+
+                // Payload: HASH_PART - TIME - HASH_PART
+                const payload = `${part1}-${timeCode}-${part3}`;
+
+                // 5. Checksum (Algorithm SecurityManager)
+                const SALT = "LocalSeal_V2_Secret_Salt_2026";
+                let sum = 0;
+                const checkInput = payload + SALT;
+                for (let i = 0; i < checkInput.length; i++) {
+                    const char = checkInput.charCodeAt(i);
+                    sum = ((sum << 5) - sum) + char;
+                    sum = sum & sum;
+                }
+                const checksum = Math.abs(sum).toString(16).toUpperCase().padStart(4, '0').slice(-4);
+
+                // 6. Finale
+                const finalKey = `${payload}-${checksum}`;
+
+                // Reset UI
+                const display = document.getElementById('key-display');
+                display.textContent = finalKey;
+
+                // Reinitialise entropy partielle pour la suivante
+                entropyPool = [];
+                chaosReady = false;
+                updateEntropyVis();
+
+                msg.textContent = "Key valid for 5 MINUTES only. Use immediately.";
+                msg.className = "text-xs text-amber-500 font-bold animate-pulse";
+
+                await navigator.clipboard.writeText(finalKey).catch(() => { });
+            } catch (err) {
+                console.error(err);
+                msg.textContent = "Error generating key. Check console.";
+                msg.className = "text-xs text-red-500";
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

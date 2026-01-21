@@ -1,0 +1,32 @@
+{
+  "name": "localseal",
+  "version": "1.0.0",
+  "description": "Application OCR client-side avec anonymisation intelligente",
+  "type": "module",
+  "main": "js/LocalSealEngine.js",
+  "scripts": {
+    "dev": "npx http-server . -p 8080 -o",
+    "build": "echo 'Application client-side, pas de build nécessaire'",
+    "serve": "python -m http.server 8080"
+  },
+  "keywords": [
+    "ocr",
+    "tesseract",
+    "nlp",
+    "anonymization",
+    "privacy",
+    "client-side"
+  ],
+  "author": "LocalSeal Team",
+  "license": "MIT",
+  "dependencies": {
+    "tesseract.js": "^5.0.0",
+    "compromise": "^14.9.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
